@@ -12,9 +12,8 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 
 
 from models.data import LandsatDataModule
-from models.nn import ConvEmbeddingClassifier
+from models.nn import ResAttentionConvNet
 from models.trainers import BasicTrainer
-from models.trainers import SigmoidFocalLoss
 from models.trainers import FocalLoss
 
 def train_inegi_model():
@@ -59,7 +58,7 @@ def train_inegi_model():
         }
 
         # Crear el modelo desde la configuración
-        model = ConvEmbeddingClassifier.from_config(config_model)
+        model = ResAttentionConvNet.from_config(config_model)
         
         # Optimizer and scheduler configuration
         optimizer_config = {
