@@ -1,4 +1,7 @@
 dataset
+wandb
+checkpoints
+.netrc
 .lightning_studio
 .idea
 __pycache__

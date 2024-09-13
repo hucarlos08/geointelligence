@@ -2,77 +2,48 @@ import h5py
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-import torch.nn.functional as F
-
-def replace_invalid_pixels_with_median(image, invalid_value=-9999, window_size=3):
-    # image is expected to be a PyTorch tensor of shape (C, H, W)
-    # Create a mask for invalid values
-    mask_invalid = (image == invalid_value)
-
-    # Replace invalid values with NaN to exclude them from median calculation
-    image = image.clone()  # Create a copy to avoid in-place modification
-    image[mask_invalid] = float('nan')
-
-    # Pad the image to handle edge cases
-    padded_image = F.pad(image.unsqueeze(0), pad=(window_size//2, window_size//2, window_size//2, window_size//2), mode='reflect')
-    
-    # For each pixel, compute the median of the surrounding window
-    patches = F.unfold(padded_image, kernel_size=window_size)
-    patches = patches.view(image.shape[0], window_size*window_size, image.shape[1], image.shape[2])
-
-    # Compute the median of valid pixels in each patch
-    median_filtered = torch.nanmedian(patches, dim=1).values
-
-    # Replace invalid pixels with the median values
-    image[mask_invalid] = median_filtered[mask_invalid]
-
-    return image
-
-def normalize_image(image):
-    """Normalize each channel of the image to [0, 1] range."""
-    # image is expected to be a numpy array of shape (C, H, W)
-    min_vals = image.min(axis=(1, 2), keepdims=True)
-    max_vals = image.max(axis=(1, 2), keepdims=True)
-    return (image - min_vals) / (max_vals - min_vals)
 
 class LandsatDataset(Dataset):
-    def __init__(self, hdf5_file, transform=None, window_size=3):
-        # Load HDF5 file
-        with h5py.File(hdf5_file, 'r') as hdf:
-            self.images = np.array(hdf['images'])
-            self.labels = np.array(hdf['labels'])
-        
-        # Transpose the images to (C, H, W) format if they're not already
-        if self.images.shape[-1] == 6:  # Assuming 6 channels
-            self.images = np.transpose(self.images, (0, 3, 1, 2))
-
-        self.window_size = window_size
+    def __init__(self, hdf5_file, transform=None, invalid_value=-9999, normalize_factor=20000.0):
+        self.hdf5_file = hdf5_file
         self.transform = transform
-    
+        self.invalid_value = invalid_value
+        self.normalize_factor = normalize_factor
+        
+        # Open the HDF5 file once and keep it open
+        self.hdf = h5py.File(self.hdf5_file, 'r')
+        self.dataset_length = len(self.hdf['images'])
+
     def __len__(self):
-        return len(self.images)
-    
+        return self.dataset_length
+
     def __getitem__(self, idx):
-        image = self.images[idx].astype(np.float32)
-        label = self.labels[idx]
+        # Read the data without reopening the file
+        image = self.hdf['images'][idx].astype(np.float32)  # Shape: (16, 16, 6)
+        
+        # Permute the image to shape (6, 16, 16)
+        image = np.transpose(image, (2, 0, 1))  # Now the shape will be (6, 16, 16)
+        
+        label = self.hdf['labels'][idx]
 
-        # Convert to PyTorch tensor for processing
+        # Replace invalid pixels with 0
+        image[image == self.invalid_value] = 0
+        
+        # Normalize the image
+        image = image / self.normalize_factor
+        
+        # Convert image to PyTorch tensor
         image = torch.from_numpy(image)
-
-        # Replace invalid pixels with the median of the surrounding window
-        image = replace_invalid_pixels_with_median(image, window_size=self.window_size)
-
-        # Convert back to numpy for normalization
-        image = image.numpy()
-
-        # Normalize the image to [0, 1] range
-        image = normalize_image(image)
-
-        # Convert to PyTorch tensor
-        image = torch.from_numpy(image)
-
-        # Apply transforms (if any)
+        
+        # Ensure the label has the shape [1]
+        label = torch.tensor([label], dtype=torch.float32)
+        
+        # Apply transformations, if any
         if self.transform:
             image = self.transform(image)
         
-        return image, torch.tensor(label, dtype=torch.long)
+        return image, label
+
+    def __del__(self):
+        # Ensure the HDF5 file is closed when the dataset object is deleted
+        self.hdf.close()

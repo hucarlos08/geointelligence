@@ -2,8 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from transformers import ViTModel
-from torchmetrics import Accuracy, Precision, Recall, F1Score, JaccardIndex
+from torchmetrics import Accuracy, Precision, Recall, F1Score, JaccardIndex, AUROC
 
 from ..utils import get_optimizer, get_lr_scheduler
 
@@ -23,7 +22,7 @@ class BasicTrainer(pl.LightningModule):
         self.precision = Precision(task="binary")
         self.recall = Recall(task="binary")
         self.f1 = F1Score(task="binary")
-        self.iou = JaccardIndex(task="binary")
+        self.aucroc = AUROC(task="binary")
 
     def _compute_metrics(self, preds, masks):
         return {
@@ -31,7 +30,7 @@ class BasicTrainer(pl.LightningModule):
             'precision': self.precision(preds, masks.int()),
             'recall': self.recall(preds, masks.int()),
             'f1': self.f1(preds, masks.int()),
-            'iou': self.iou(preds, masks.int())
+            'aucroc': self.aucroc(preds, masks.int())
         }
 
     def _log_metrics(self, metrics, stage, batch_size):
@@ -42,7 +41,7 @@ class BasicTrainer(pl.LightningModule):
         return self.model(x)
 
     def step(self, batch, stage):
-        images, masks, _ = batch
+        images, masks  = batch
         logits = self.forward(images)
         loss = self.loss(logits, masks)
         

@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='Mistletoe-Detection',
+    name='INEGI-Zindi',
     version='0.1.0',
     url='https://github.com/hucarlos08/mistletoe.git',
     author='Centro Geo',
@@ -21,5 +21,6 @@ setup(
     'torchinfo', 
     'torchmetrics', 
     'pytorch_lightning',
+    'h5py'
                           ],
 )
