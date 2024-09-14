@@ -21,6 +21,7 @@ setup(
     'torchinfo', 
     'torchmetrics', 
     'pytorch_lightning',
-    'h5py'
+    'h5py',
+    'jax',
                           ],
 )

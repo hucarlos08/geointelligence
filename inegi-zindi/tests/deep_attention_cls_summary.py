@@ -5,7 +5,7 @@ from models.nn import ResAttentionConvNet
 class TestUNetSummary(unittest.TestCase):
 
     def setUp(self):
-        self.batch_size = 1024
+        self.batch_size = 2048
         self.channels = 6
         self.embeddins_size = 256
         self.image_height = 16

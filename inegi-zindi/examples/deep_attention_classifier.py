@@ -31,7 +31,7 @@ def train_inegi_model():
         config_data_module = {
             'train_file': '/teamspace/studios/this_studio/dataset/optimized_balanced_train_data.h5',
             'test_file': '/teamspace/studios/this_studio/dataset/test_data.h5',
-            'batch_size': 1024,
+            'batch_size': 2048,
             'num_workers': 4,
             'seed': 50,
             'split_ratio': (0.8, 0.2),
@@ -90,7 +90,7 @@ def train_inegi_model():
 
         # Create trainer
         trainer = pl.Trainer(
-            max_epochs=20,
+            max_epochs=30,
             logger=wandb_logger,
             log_every_n_steps=5,
             callbacks=[checkpoint_callback, lr_monitor],
