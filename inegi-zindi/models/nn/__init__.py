@@ -1,16 +1,22 @@
-from .simpler_classifier import (
+from .simpler_model import (
     SimpleClassifier,
 )
 
-from .embedding_classifier import (
+from .embedding_model import (
     ConvEmbeddingClassifier,
 )
 
-from .deep_attention import(
+from .deep_attention_model import(
     SEBlock,
     ResidualBlock,
     ResAttentionConvNet
 
+)
+
+from .cbam_model import(
+    CBAMBlock,
+    ResidualBlockCBAM,
+    ResAttentionConvNetCBAM
 )
 
 __all__ = [

@@ -44,7 +44,7 @@ class ResidualBlock(nn.Module):
         return out
 
 class ResAttentionConvNet(nn.Module):
-    def __init__(self, input_channels=6, embedding_size=256, num_classes=1):
+    def __init__(self, input_channels=6, embedding_size=256, num_classes=1, dropout_rate=0.20):
         super(ResAttentionConvNet, self).__init__()
         
         self.conv1 = nn.Conv2d(input_channels, 32, kernel_size=3, padding=1)
@@ -53,22 +53,29 @@ class ResAttentionConvNet(nn.Module):
         self.res1 = ResidualBlock(32, 64)
         self.res2 = ResidualBlock(64, 128)
         self.res3 = ResidualBlock(128, 256)
+        self.res4 = ResidualBlock(256, 512)
         
-        self.attention = nn.MultiheadAttention(256, num_heads=4, batch_first=True)
+        self.attention = nn.MultiheadAttention(512, num_heads=4, batch_first=True)
         
         self.global_pool = nn.AdaptiveAvgPool2d(1)
         
-        self.fc1 = nn.Linear(256, embedding_size)
-        self.fc2 = nn.Linear(embedding_size, num_classes)
+        self.fc1 = nn.Linear(512, 256)
+        self.fc2 = nn.Linear(256, embedding_size)
+        self.fc3 = nn.Linear(embedding_size, num_classes)
         
-        self.dropout = nn.Dropout(0.5)
+        self.dropout = nn.Dropout(dropout_rate)
 
     def forward(self, x):
         x = F.relu(self.bn1(self.conv1(x)))
+        x = self.dropout(x)  # New dropout after initial conv
         
         x = self.res1(x)
+        x = self.dropout(x)  # New dropout after res1
         x = self.res2(x)
+        x = self.dropout(x)  # New dropout after res2
         x = self.res3(x)
+        x = self.dropout(x)
+        x = self.res4(x)
         
         # Apply attention
         b, c, h, w = x.size()
@@ -82,6 +89,8 @@ class ResAttentionConvNet(nn.Module):
         x = F.relu(self.fc1(x))
         x = self.dropout(x)
         x = self.fc2(x)
+        x = self.dropout(x)
+        x = self.fc3(x)
         
         return x
 

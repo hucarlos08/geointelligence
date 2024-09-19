@@ -1,6 +1,6 @@
 import unittest
 from torchinfo import summary
-from models.nn import ResAttentionConvNet
+from models.nn import ResAttentionConvNetCBAM
 
 class TestUNetSummary(unittest.TestCase):
 
@@ -10,7 +10,7 @@ class TestUNetSummary(unittest.TestCase):
         self.embeddins_size = 256
         self.image_height = 16
         self.image_width = 16
-        self.model = ResAttentionConvNet(input_channels=self.channels, embedding_size=self.embeddins_size, num_classes=1)
+        self.model = ResAttentionConvNetCBAM(input_channels=self.channels, embedding_size=self.embeddins_size, num_classes=1)
 
     def test_model_summary(self):
         model_summary = summary(

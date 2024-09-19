@@ -1,5 +1,7 @@
 import jax.numpy as jnp
 from jax import vmap
+import json
+import numpy as np
 
 def replace_atypical_values(image, atypical_value=-9999, replacement_func=jnp.nanmean):
     """
@@ -81,22 +83,23 @@ def process_images(images, atypical_value=-9999):
     means, variances : jnp.ndarray
         Per-channel means and variances of the normalized images.
     """
+    mins, maxs, _, _ = calculate_channel_stats(images)
+    print(f"mins: {mins}, maxs: {maxs}")
+
     # Step 1: Replace atypical values
-    images_cleaned = vmap(replace_atypical_values, in_axes=(0, None))(images, atypical_value)
+    #images = vmap(replace_atypical_values, in_axes=(0, None))(images, atypical_value)
     
     # Step 2: Calculate channel-wise statistics
-    mins, maxs, _, _ = calculate_channel_stats(images_cleaned)
-    
+    mins, maxs, _, _ = calculate_channel_stats(images)
+
     # Step 3: Normalize images to [0, 1] channel-wise
-    images_normalized = vmap(normalize_image, in_axes=(0, None, None))(images_cleaned, mins, maxs)
+    images = vmap(normalize_image, in_axes=(0, None, None))(images, mins, maxs)
     
     # Step 4: Calculate statistics on normalized images
-    _, _, means, variances = calculate_channel_stats(images_normalized)
+    _, _, means, variances = calculate_channel_stats(images)
     
-    return images_normalized, means, variances
+    return images, means, variances
 
-import json
-import numpy as np
 
 def save_stats(means, variances, filename='landsat_stats.json'):
     """

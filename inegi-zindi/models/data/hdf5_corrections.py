@@ -2,9 +2,13 @@ import h5py
 import numpy as np
 import os
 
-def optimize_hdf5_chunking(input_hdf5_file, output_hdf5_file, new_image_chunk_size=(32, 16, 16, 6), new_label_chunk_size=(32,)):
+def optimize_hdf5_chunking(input_hdf5_file, output_hdf5_file, 
+                           chunk_size=(32, 16, 16, 6), 
+                           image_dtype=None, label_dtype=None):
     """
-    Optimizes the chunk size of an HDF5 dataset and preserves metadata and dtype from the original file.
+    Optimizes the chunk size of an HDF5 dataset and preserves metadata and dtype from the original file,
+    unless a specific dtype is provided. The label dataset chunk size will use the first dimension of
+    the chunk_size tuple.
     
     Parameters:
     -----------
@@ -14,13 +18,15 @@ def optimize_hdf5_chunking(input_hdf5_file, output_hdf5_file, new_image_chunk_si
     output_hdf5_file : str
         Path to the output HDF5 file where the optimized dataset will be stored.
     
-    new_image_chunk_size : tuple, optional
-        The chunk size for the 'images' dataset in the new HDF5 file. 
-        Default is (32, 16, 16, 6), suitable for batch processing of image data.
+    chunk_size : tuple, optional
+        The chunk size for the 'images' dataset in the new HDF5 file. The first dimension will be used
+        for the 'labels' dataset. Default is (32, 16, 16, 6), suitable for batch processing of image data.
     
-    new_label_chunk_size : tuple, optional
-        The chunk size for the 'labels' dataset in the new HDF5 file.
-        Default is (32,), suitable for batch-wise label access.
+    image_dtype : numpy.dtype, optional
+        Data type to be used for the 'images' dataset. If None, uses the original dtype from the input file.
+    
+    label_dtype : numpy.dtype, optional
+        Data type to be used for the 'labels' dataset. If None, uses the original dtype from the input file.
     
     Returns:
     --------
@@ -51,23 +57,31 @@ def optimize_hdf5_chunking(input_hdf5_file, output_hdf5_file, new_image_chunk_si
             if 'images' not in hdf or 'labels' not in hdf:
                 raise ValueError("Required datasets 'images' and/or 'labels' not found in the HDF5 file.")
             
-            # Extract data
-            X = np.array(hdf['images'])
-            y = np.array(hdf['labels'])
-            
             # Extract metadata for 'images'
-            dtype_images = hdf['images'].dtype
+            dtype_images = image_dtype if image_dtype is not None else hdf['images'].dtype
             band_names = hdf['images'].attrs.get('band_names', None)  # Get band names if available
+            
+            # Extract the images (with dtype conversion if specified)
+            X = np.array(hdf['images'], dtype=dtype_images)
+            
+            # Extract metadata for 'labels'
+            dtype_labels = label_dtype if label_dtype is not None else hdf['labels'].dtype
+            
+            # Extract the labels (with dtype conversion if specified)
+            y = np.array(hdf['labels'], dtype=dtype_labels)
             
     except OSError as e:
         raise IOError(f"Error reading the HDF5 file: {e}")
     
     try:
+        # Calculate the label chunk size using only the first dimension of the image chunk size
+        label_chunk_size = (chunk_size[0],)
+        
         # Create a new HDF5 file and apply optimized chunk size
         with h5py.File(output_hdf5_file, 'w') as new_hdf:
-            # Create the 'images' dataset with optimized chunk size and original dtype
+            # Create the 'images' dataset with optimized chunk size and specified dtype
             images_dset = new_hdf.create_dataset('images', data=X, 
-                                                 chunks=new_image_chunk_size, 
+                                                 chunks=chunk_size, 
                                                  compression='gzip', 
                                                  dtype=dtype_images)
             
@@ -75,11 +89,11 @@ def optimize_hdf5_chunking(input_hdf5_file, output_hdf5_file, new_image_chunk_si
             if band_names is not None:
                 images_dset.attrs['band_names'] = band_names
             
-            # Create the 'labels' dataset with optimized chunk size and preserve dtype
+            # Create the 'labels' dataset with chunk size derived from the first dimension of chunk_size
             new_hdf.create_dataset('labels', data=y, 
-                                   chunks=new_label_chunk_size, 
+                                   chunks=label_chunk_size, 
                                    compression='gzip', 
-                                   dtype=y.dtype)
+                                   dtype=dtype_labels)
         
         print(f"New HDF5 file created at {output_hdf5_file} with optimized chunking.")
     
@@ -87,8 +101,7 @@ def optimize_hdf5_chunking(input_hdf5_file, output_hdf5_file, new_image_chunk_si
         raise IOError(f"Error writing the HDF5 file: {e}")
 
 
-
-def balance_hdf5_dataset(hdf5_file, random_seed=None):
+def balance_hdf5_dataset(hdf5_file, random_seed=None, dtype=None):
     """
     Balances a binary-labeled dataset stored in an HDF5 file by undersampling the majority class.
     
@@ -99,6 +112,9 @@ def balance_hdf5_dataset(hdf5_file, random_seed=None):
         
     random_seed : int, optional
         Seed for reproducibility of the random sampling process. Default is None.
+    
+    dtype : numpy.dtype, optional
+        Data type for reading the dataset. If None, uses the original dtype from the input file.
         
     Returns:
     --------
@@ -115,12 +131,13 @@ def balance_hdf5_dataset(hdf5_file, random_seed=None):
     
     # Open the HDF5 file
     with h5py.File(hdf5_file, 'r') as hdf:
-        # Extract the images (X) and labels (y)
+        # Extract the images (X) and labels (y) with the specified or default dtype
         if 'images' not in hdf or 'labels' not in hdf:
             raise ValueError("Datasets 'images' or 'labels' not found in the HDF5 file.")
         
-        X = np.array(hdf['images'])
-        y = np.array(hdf['labels'])
+        dtype_images = dtype if dtype is not None else hdf['images'].dtype
+        X = np.array(hdf['images'], dtype=dtype_images)
+        y = np.array(hdf['labels'], dtype=np.uint8)
         
         # Check the shape of the data
         print("Shape of X (images):", X.shape)
@@ -148,3 +165,56 @@ def balance_hdf5_dataset(hdf5_file, random_seed=None):
         print(f"Number of 0's in balanced y: {np.sum(y_balanced == 0)}")
     
     return X_balanced, y_balanced
+
+
+def write_to_hdf5(X, y, output_hdf5_file, chunk_size=(32, 16, 16, 6), image_dtype=None, label_dtype=None):
+    """
+    Writes the input data (X, y) to an HDF5 file with specified chunk sizes and dtypes. The label dataset
+    will use the first dimension of chunk_size as its chunk size.
+    
+    Parameters:
+    -----------
+    X : np.ndarray
+        The input array of images.
+        
+    y : np.ndarray
+        The input array of labels.
+        
+    output_hdf5_file : str
+        Path to the output HDF5 file where the data will be stored.
+        
+    chunk_size : tuple, optional
+        The chunk size for the 'images' dataset in the new HDF5 file. The label dataset will use only 
+        the first dimension for its chunk size.
+        Default is (32, 16, 16, 6), suitable for batch processing of image data.
+    
+    image_dtype : numpy.dtype, optional
+        Data type for the 'images' dataset. If None, uses the dtype of the input array X.
+        
+    label_dtype : numpy.dtype, optional
+        Data type for the 'labels' dataset. If None, uses the dtype of the input array y.
+        
+    Returns:
+    --------
+    None
+        The function creates a new HDF5 file with the input data and specified chunk sizes and dtypes.
+    """
+    
+    # Calculate the label chunk size using only the first dimension of the image chunk size
+    label_chunk_size = (chunk_size[0],)
+    
+    # Create a new HDF5 file and write the input data
+    with h5py.File(output_hdf5_file, 'w') as new_hdf:
+        # Create the 'images' dataset with specified chunk size and dtype
+        new_hdf.create_dataset('images', data=X, 
+                               chunks=chunk_size, 
+                               compression='gzip', 
+                               dtype=image_dtype if image_dtype else X.dtype)
+        
+        # Create the 'labels' dataset with chunk size derived from the first dimension of chunk_size
+        new_hdf.create_dataset('labels', data=y, 
+                               chunks=label_chunk_size, 
+                               compression='gzip', 
+                               dtype=label_dtype if label_dtype else y.dtype)
+    
+    print(f"Data written to HDF5 file: {output_hdf5_file}")

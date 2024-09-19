@@ -13,7 +13,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 
 
 from models.data import LandsatDataModule
-from models.nn import ResAttentionConvNet
+from models.nn import ResAttentionConvNetCBAM
 from models.trainers import BasicTrainer
 from models.trainers import FocalLoss
 
@@ -32,7 +32,7 @@ def train_inegi_model():
         config_data_module = {
             'train_file': '/teamspace/studios/this_studio/datasets/uint16_optimized_balanced_train_data.h5',
             'test_file': '/teamspace/studios/this_studio/dataset/test_data.h5',
-            'batch_size': 512,
+            'batch_size': 1024,
             'dtype': np.uint16,
             'num_workers': 4,
             'seed': 50,
@@ -56,11 +56,12 @@ def train_inegi_model():
         config_model = {
             'input_channels': 6,
             'embedding_size': 256,
-            'num_classes': 1
+            'num_classes': 1,
+            'dropout_rate': 0.5
         }
 
         # Crear el modelo desde la configuración
-        model = ResAttentionConvNet.from_config(config_model)
+        model = ResAttentionConvNetCBAM.from_config(config_model)
         
         # Optimizer and scheduler configuration
         optimizer_config = {

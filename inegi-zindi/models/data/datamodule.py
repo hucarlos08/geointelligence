@@ -7,7 +7,7 @@ from torchvision import transforms
 from .dataset import LandsatDataset  # Assuming you have this dataset
 
 class LandsatDataModule(pl.LightningDataModule):
-    def __init__(self, train_file, test_file, batch_size=32, transform=None, num_workers=4, seed=42, split_ratio=(0.8, 0.2)):
+    def __init__(self, train_file, test_file, batch_size=32, transform=None, dtype=np.uint16, num_workers=4, seed=42, split_ratio=(0.8, 0.2)):
         super().__init__()
         self.train_file = train_file
         self.test_file = test_file
@@ -15,6 +15,8 @@ class LandsatDataModule(pl.LightningDataModule):
         self.num_workers = num_workers
         self.seed = seed
         self.transform = transform
+
+        self.dtype = dtype
 
         # Use the split ratio for train/val (since the test dataset is separate)
         self.split_ratio = split_ratio
@@ -36,6 +38,7 @@ class LandsatDataModule(pl.LightningDataModule):
         num_workers = config.get('num_workers', 4)
         seed = config.get('seed', 42)
         split_ratio = config.get('split_ratio', (0.8, 0.2))
+        dtype = config.get('dtype', np.uint16)
 
         # Handle transforms
         transform = None
@@ -48,6 +51,7 @@ class LandsatDataModule(pl.LightningDataModule):
             test_file=test_file,
             batch_size=batch_size,
             transform=transform,
+            dtype=dtype,
             num_workers=num_workers,
             seed=seed,
             split_ratio=split_ratio,
@@ -62,7 +66,7 @@ class LandsatDataModule(pl.LightningDataModule):
             stage (str): Current stage (fit, validate, test, or None).
         """
         # Load the train dataset
-        full_train_dataset = LandsatDataset(self.train_file, transform=self.transform)
+        full_train_dataset = LandsatDataset(self.train_file, transform=self.transform, dtype=self.dtype)
         
         # Calculate sizes for train/val splits
         train_size = int(self.split_ratio[0] * len(full_train_dataset))
@@ -76,7 +80,7 @@ class LandsatDataModule(pl.LightningDataModule):
 
         # Load the test dataset separately
         if stage == 'test' or stage is None:
-            self.test_dataset = LandsatDataset(self.test_file, transform=self.transform)
+            self.test_dataset = LandsatDataset(self.test_file, transform=self.transform, dtype=self.dtype)
 
     def prepare_data(self):
         """
@@ -126,7 +130,7 @@ class LandsatDataModule(pl.LightningDataModule):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
 
     def test_dataloader(self):
         return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
