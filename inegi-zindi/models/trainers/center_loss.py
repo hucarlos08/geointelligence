@@ -17,7 +17,8 @@ class CenterLoss(nn.Module):
         super(CenterLoss, self).__init__()
         self.num_classes = num_classes
         self.feat_dim = feat_dim
-        self.centers = nn.Parameter(torch.randn(num_classes, feat_dim))
+        # Initialize centers more carefully, e.g., with normal distribution
+        self.centers = nn.Parameter(torch.randn(num_classes, feat_dim) * 0.01)  
         self.lambda_c = lambda_c
 
     def forward(self, features, labels):
@@ -31,13 +32,17 @@ class CenterLoss(nn.Module):
         Returns:
             torch.Tensor: The center loss value.
         """
-        # Ensure labels are 1D by squeezing the second dimension
+        # Ensure labels are 1D
         labels = labels.squeeze(1)
 
+        # Ensure self.centers are on the same device as features
+        # This modifies the underlying data of the tensor without changing the parameter itself
+        self.centers.data = self.centers.data.to(features.device)
+
         # Select the centers for the current batch of labels
-        centers_batch = self.centers.index_select(0, labels.long())  # Ensure labels are long (integer type)
+        centers_batch = self.centers.index_select(0, labels.long())
 
         # Calculate center loss
-        center_loss = (features - centers_batch).pow(2).sum() / 2.0 / features.size(0)
+        center_loss = (features - centers_batch).pow(2).mean() / 2.0
 
         return self.lambda_c * center_loss

@@ -10,9 +10,12 @@ from models.trainers import CenterLoss  # Assuming you have this custom loss
 class TestLossFunctions(unittest.TestCase):
 
     def setUp(self):
-        # Set up some example inputs and targets
-        self.inputs = torch.randn((3,1), requires_grad=True)
-        self.targets = torch.empty(3,1).random_(2)
+        # Set device to GPU if available, otherwise CPU
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        # Set up some example inputs and targets, and move them to the selected device
+        self.inputs = torch.randn((3, 1), requires_grad=True, device=self.device)
+        self.targets = torch.empty(3, 1, device=self.device).random_(2)
 
     def test_single_loss_function(self):
         """Test using a single loss function, like BCEWithLogitsLoss."""
@@ -50,7 +53,10 @@ class TestLossFunctions(unittest.TestCase):
     def test_center_loss(self):
         """Test the custom CenterLoss function."""
         # Configuration for CenterLoss
-        loss_config = {'CenterLoss': {'num_classes': 2, 'feat_dim': 3}}
+        loss_config = {
+            'FocalLoss': {'alpha': 0.8, 'gamma': 2},
+            'CenterLoss': {'num_classes': 2, 'feat_dim': 3}
+        }
 
         # Create the loss function
         loss_function = LossFactory._create_loss(loss_config)
