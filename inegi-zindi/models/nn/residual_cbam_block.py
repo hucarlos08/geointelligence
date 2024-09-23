@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from typing import Type, Union
+from typing import Type
 
 from .attention_mechanisc import CBAMBlock
 
@@ -15,22 +14,39 @@ class ResidualBlockCBAM(nn.Module):
         reduction: int = 16,
         dropout_rate: float = 0.5,
         activation: Type[nn.Module] = nn.ReLU,
-        normalization: Type[nn.Module] = nn.BatchNorm2d,
-        use_preactivation: bool = False
+        normalization: Type[nn.Module] = nn.BatchNorm2d
     ):
+        """
+        Residual Block with Channel Attention Module (CBAM) implementation.
+        
+        Args:
+            in_channels (int): Number of input channels.
+            out_channels (int): Number of output channels.
+            stride (int, optional): Stride value for the convolutional layers. Defaults to 1.
+            expansion (int, optional): Expansion factor for the number of channels. Defaults to 1.
+            reduction (int, optional): Reduction factor for the channel attention mechanism. Defaults to 16.
+            dropout_rate (float, optional): Dropout rate. Defaults to 0.5.
+            activation (Type[nn.Module], optional): Activation function to be used. Defaults to nn.ReLU.
+            normalization (Type[nn.Module], optional): Normalization layer to be used. Defaults to nn.BatchNorm2d.
+        """
         super(ResidualBlockCBAM, self).__init__()
         self.expansion = expansion
-        self.use_preactivation = use_preactivation
         expanded_channels = out_channels * expansion
 
+        # Pre-activation batch normalization for input channels
+        self.bn1_input = normalization(in_channels)  # Match input channels
         self.conv1 = nn.Conv2d(in_channels, expanded_channels, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn1 = normalization(expanded_channels)
+        
+        # Batch normalization for expanded channels
+        self.bn1_expanded = normalization(expanded_channels)  # Match expanded channels
+        
         self.conv2 = nn.Conv2d(expanded_channels, out_channels, kernel_size=3, padding=1, bias=False)
         self.bn2 = normalization(out_channels)
         self.cbam = CBAMBlock(out_channels, reduction)
         self.dropout = nn.Dropout(dropout_rate)
         self.activation = activation(inplace=True)
 
+        # Shortcut connection to match input and output dimensions
         self.shortcut = nn.Sequential()
         if stride != 1 or in_channels != out_channels:
             self.shortcut = nn.Sequential(
@@ -39,32 +55,34 @@ class ResidualBlockCBAM(nn.Module):
             )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.use_preactivation:
-            return self._forward_preactivation(x)
-        else:
-            return self._forward_postactivation(x)
-
-    def _forward_preactivation(self, x: torch.Tensor) -> torch.Tensor:
-        out = self.bn1(x)
+        """
+        Forward pass of the Residual Block with CBAM.
+        
+        Args:
+            x (torch.Tensor): Input tensor.
+        
+        Returns:
+            torch.Tensor: Output tensor.
+        """
+        # Pre-activation on the input channels
+        out = self.bn1_input(x)
         out = self.activation(out)
+        
+        # Apply conv1 to expand channels
         out = self.conv1(out)
-        out = self.bn2(out)
+        
+        # Apply normalization and activation after expansion
+        out = self.bn1_expanded(out)
         out = self.activation(out)
+        
+        # Apply conv2 and CBAM
         out = self.conv2(out)
         out = self.cbam(out)
-        out += self.shortcut(x)
-        out = self.dropout(out)
-        return out
 
-    def _forward_postactivation(self, x: torch.Tensor) -> torch.Tensor:
-        residual = x
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.activation(out)
-        out = self.conv2(out)
-        out = self.bn2(out)
-        out = self.cbam(out)
-        out += self.shortcut(residual)
-        out = self.activation(out)
+        # Add the shortcut (residual connection)
+        out += self.shortcut(x)
+        
+        # Apply dropout
         out = self.dropout(out)
+        
         return out
