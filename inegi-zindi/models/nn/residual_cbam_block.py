@@ -16,7 +16,7 @@ class ResidualBlockCBAM(nn.Module):
         dropout_rate: float = 0.5,
         activation: Type[nn.Module] = nn.ReLU,
         normalization: Type[nn.Module] = nn.BatchNorm2d,
-        use_preactivation: bool = True
+        use_preactivation: bool = False
     ):
         super(ResidualBlockCBAM, self).__init__()
         self.expansion = expansion
