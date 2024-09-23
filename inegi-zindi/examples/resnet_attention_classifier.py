@@ -37,20 +37,20 @@ def train_inegi_model():
             'num_workers': 4,
             'seed': 50,
             'split_ratio': (0.8, 0.2),
-            # 'transform': {
-            #     'Normalize': {  'mean': [0.5,  0.5, 0.5], 
-            #                     'std':  [0.5, 0.5, 0.5]
-            #                     },
-            # }
+            'transform': {
+                 'RandomHorizontalFlip': {'p': 0.5},
+                 'RandomVerticalFlip': {'p': 0.5},
+                 'RandomRotation': {'degrees': 90},
+            }
         }
         # Create the HDF5DataModule from the configuration
         data_module = LandsatDataModule.from_config(config_data_module)
         print("DataModule created successfully")
 
         # Loss function
-        #loss = nn.BCEWithLogitsLoss()
+        loss = nn.BCEWithLogitsLoss()
         #loss = SigmoidFocalLoss(alpha=0.25, gamma=2.0, reduction='mean')
-        loss = FocalLoss(alpha=0.25, gamma=2.0)
+        #loss = FocalLoss(alpha=0.5, gamma=2.0)
 
         # Create model
         config_model = {
@@ -81,7 +81,7 @@ def train_inegi_model():
          # Setup model checkpoint callback
         checkpoint_callback = ModelCheckpoint(
             dirpath='checkpoints',
-            filename='mistletoe-{epoch:02d}-{val_loss:.2f}',
+            filename='inegi-{epoch:02d}-{val_loss:.2f}',
             save_top_k=3,
             monitor='val_loss',
             mode='min'

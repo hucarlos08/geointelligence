@@ -14,8 +14,8 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 
 from models.data import LandsatDataModule
 from models.nn import ResAttentionConvNetCBAM
-from models.trainers import BasicTrainer
-from models.trainers import FocalLoss
+from models.trainers import FeatureAwareTrainer
+from models.trainers import CombinedLoss
 
 def train_inegi_model():
     """
@@ -50,7 +50,23 @@ def train_inegi_model():
         # Loss function
         #loss = nn.BCEWithLogitsLoss()
         #loss = SigmoidFocalLoss(alpha=0.25, gamma=2.0, reduction='mean')
-        loss = FocalLoss(alpha=0.25, gamma=2.0)
+        #loss = FocalLoss(alpha=0.25, gamma=2.0)
+
+        # Create the feature loss
+        #feature_loss = CenterLoss(num_classes=2, feat_dim=256, lambda_c=0.003)
+
+        # Create the combined loss
+        config_combined_loss = {
+            'feat_dim': 256,
+            'num_classes': 2,
+            'arcface_margin': 0.5,
+            'arcface_scale': 32,
+            'center_loss_weight': 0.009,
+            'alpha': 0.75,
+            'gamma': 2.0
+        }
+
+        feature_loss = CombinedLoss.from_config(config_combined_loss)
 
         # Create model
         config_model = {
@@ -67,7 +83,7 @@ def train_inegi_model():
         optimizer_config = {
             'type': 'AdamW',
             'lr': 1e-3,
-            'weight_decay': 1.0e-5
+            'weight_decay': 1.0e-4
         }
         scheduler_config = {
             'type': 'StepLR',
@@ -76,13 +92,13 @@ def train_inegi_model():
         }
 
         # Create Lightning module
-        trainer_module = BasicTrainer(model, loss, optimizer_config, scheduler_config)
+        trainer_module = FeatureAwareTrainer(model, feature_loss, optimizer_config, scheduler_config)
         print("Lightning module created successfully")
 
-        # Setup model checkpoint callback
+         # Setup model checkpoint callback
         checkpoint_callback = ModelCheckpoint(
             dirpath='checkpoints',
-            filename='inegi-{epoch:02d}-{val_loss:.2f}',
+            filename='mistletoe-{epoch:02d}-{val_loss:.2f}',
             save_top_k=3,
             monitor='val_loss',
             mode='min'

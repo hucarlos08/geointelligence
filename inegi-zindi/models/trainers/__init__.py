@@ -23,6 +23,19 @@ from .arcface_loss import (
     ArcFaceLoss,
 )
 
+from .combined_loss import (
+    CombinedLoss,
+)
+
+from .focal_center_loss import (
+    FocalCenterLoss,
+)
+
+from .loss_factory_module import (
+    LossCompose,
+    LossFactory,
+)
+
 __all__ = [
     "BasicTrainer",
     "SigmoidFocalLoss",

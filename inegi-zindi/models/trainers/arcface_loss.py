@@ -4,61 +4,41 @@ import torch.nn.functional as F
 import math
 
 class ArcFaceLoss(nn.Module):
-    """
-    ArcFace Loss (Additive Angular Margin Loss) introduces an angular margin between classes
-    to enhance the inter-class separability of features.
-    
-    Args:
-        feat_dim (int): The dimension of the input features.
-        num_classes (int): The number of classes.
-        margin (float, optional): The angular margin to be added between features and class centers. Default is 0.5.
-        scale (float, optional): A scaling factor for the logits to adjust the impact of the margin. Default is 64.
-    """
-    def __init__(self, feat_dim, num_classes, margin=0.5, scale=64):
+    def __init__(self, num_features, scale=30.0, margin=0.50):
         super(ArcFaceLoss, self).__init__()
-        self.feat_dim = feat_dim  # Dimensionality of the input features
-        self.num_classes = num_classes  # Number of classes
-        self.margin = margin  # Angular margin
-        self.scale = scale  # Scaling factor to amplify the margin's effect
-        
-        # Weight matrix representing the class centers in the feature space
-        self.weight = nn.Parameter(torch.Tensor(num_classes, feat_dim))
-        nn.init.xavier_uniform_(self.weight)  # Initialize the class center weights
-        
+        self.scale = scale
+        self.margin = margin
+        self.weight = nn.Parameter(torch.Tensor(2, num_features))  # 2 classes for binary classification
+        nn.init.xavier_uniform_(self.weight)  # Initialize weights
+
     def forward(self, features, labels):
-        """
-        Forward pass of ArcFace Loss.
-        
-        Args:
-            features (torch.Tensor): The input features of shape (batch_size, feat_dim).
-            labels (torch.Tensor): The ground truth labels of shape (batch_size,).
-        
-        Returns:
-            torch.Tensor: The computed ArcFace loss.
-        """
-        # Normalize the features and weight to ensure they lie on the unit hypersphere
-        normalized_features = F.normalize(features, p=2, dim=1)
-        normalized_weight = F.normalize(self.weight, p=2, dim=1)
-        
-        # Compute the cosine similarity between the features and the weight (class centers)
-        cosine = F.linear(normalized_features, normalized_weight)  # Shape: (batch_size, num_classes)
-        
-        # Retrieve the cosine similarity for the correct classes using the labels
-        theta = cosine.acos()  # Get the angle for the current batch
-        target_logits = torch.gather(cosine, 1, labels.view(-1, 1)).squeeze(1)  # Get cosine for the true labels
-        
-        # Apply the angular margin (add margin to the angle)
-        target_logits = torch.cos(theta + self.margin)  # Apply margin to the correct class only
-        
-        # Create logits with the margin for the correct class and the original logits for the others
-        one_hot = torch.zeros_like(cosine)  # Shape: (batch_size, num_classes)
-        one_hot.scatter_(1, labels.view(-1, 1), 1)  # One-hot encode the labels
-        logits = one_hot * target_logits.unsqueeze(1) + (1 - one_hot) * cosine  # Only apply margin to the correct class
-        
+
+        labels = labels.long()
+
+        # Normalize features and weights
+        features = F.normalize(features, p=2, dim=1)
+        weight_norm = F.normalize(self.weight, p=2, dim=1)
+
+        # Cosine similarity between features and class weights
+        cosine = torch.matmul(features, weight_norm.t())  # [batch, 2] -> cosine similarity between features and weights
+
+        # Add the margin to the target class logits
+        target_logit = cosine.gather(1, labels.view(-1, 1)).squeeze(1)
+        margin_cosine = torch.cos(torch.acos(target_logit) + self.margin)
+ 
+        # Construct the final logits with margin applied to the correct class
+        cosine = cosine.scatter(1, labels.view(-1, 1), margin_cosine.view(-1, 1))
+
         # Apply the scaling factor
-        logits = logits * self.scale
-        
-        # Return cross-entropy loss with the modified logits
-        loss = F.cross_entropy(logits, labels)
-        
+        logits = self.scale * cosine  # shape: [batch_size, 2]
+
+        # Transform binary labels to two-class format
+        labels = labels.view(-1)
+
+        #Transform binary labels to two-class format
+        two_class_labels = F.one_hot(labels.long().squeeze(), num_classes=2)
+
+        # Compute binary cross-entropy loss
+        loss = F.binary_cross_entropy_with_logits(logits, two_class_labels.float())
+
         return loss

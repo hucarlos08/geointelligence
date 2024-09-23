@@ -24,6 +24,8 @@ class BasicTrainer(pl.LightningModule):
         self.f1 = F1Score(task="binary")
         self.aucroc = AUROC(task="binary")
 
+        self.save_hyperparameters()
+
     def _compute_metrics(self, preds, masks):
         return {
             'accuracy': self.accuracy(preds, masks.int()),

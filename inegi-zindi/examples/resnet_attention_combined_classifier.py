@@ -13,10 +13,9 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 
 
 from models.data import LandsatDataModule
-from models.nn import ResAttentionConvNetCBAM
+from models.nn import ResAttentionConvNet
 from models.trainers import FeatureAwareTrainer
-from models.trainers import FocalLoss
-from models.trainers import CenterLoss
+from models.trainers import FocalCenterLoss
 
 def train_inegi_model():
     """
@@ -38,40 +37,44 @@ def train_inegi_model():
             'num_workers': 4,
             'seed': 50,
             'split_ratio': (0.8, 0.2),
-            # 'transform': {
-            #     'Normalize': {  'mean': [0.5,  0.5, 0.5], 
-            #                     'std':  [0.5, 0.5, 0.5]
-            #                     },
-            # }
+            'transform': {
+                 'RandomHorizontalFlip': {'p': 0.5},
+                 'RandomVerticalFlip': {'p': 0.5},
+                 'RandomRotation': {'degrees': 90},
+            }
         }
         # Create the HDF5DataModule from the configuration
         data_module = LandsatDataModule.from_config(config_data_module)
         print("DataModule created successfully")
 
         # Loss function
-        #loss = nn.BCEWithLogitsLoss()
-        #loss = SigmoidFocalLoss(alpha=0.25, gamma=2.0, reduction='mean')
-        loss = FocalLoss(alpha=0.25, gamma=2.0)
+        # Create the combined focal center loss
+        config_combined_loss = {
+            'feat_dim': 256,
+            'num_classes': 2,
+            'center_loss_weight': 0.003,
+            'alpha': 0.25,
+            'gamma': 2.0
+        }
 
-        # Create the feature loss
-        feature_loss = CenterLoss(num_classes=2, feat_dim=256, lambda_c=0.003)
+        loss = FocalCenterLoss.from_config(config_combined_loss)
 
         # Create model
         config_model = {
             'input_channels': 6,
             'embedding_size': 256,
             'num_classes': 1,
-            'dropout_rate': 0.5
+            'dropout_rate': 0.30
         }
 
         # Crear el modelo desde la configuración
-        model = ResAttentionConvNetCBAM.from_config(config_model)
+        model = ResAttentionConvNet.from_config(config_model)
         
         # Optimizer and scheduler configuration
         optimizer_config = {
             'type': 'AdamW',
             'lr': 1e-3,
-            'weight_decay': 1.0e-5
+            'weight_decay': 1.0e-4
         }
         scheduler_config = {
             'type': 'StepLR',
@@ -80,7 +83,7 @@ def train_inegi_model():
         }
 
         # Create Lightning module
-        trainer_module = FeatureAwareTrainer(model, loss, feature_loss, optimizer_config, scheduler_config)
+        trainer_module = FeatureAwareTrainer(model, loss, optimizer_config, scheduler_config)
         print("Lightning module created successfully")
 
          # Setup model checkpoint callback

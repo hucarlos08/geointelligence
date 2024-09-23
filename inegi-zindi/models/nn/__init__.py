@@ -6,7 +6,7 @@ from .embedding_model import (
     ConvEmbeddingClassifier,
 )
 
-from .deep_attention_model import(
+from .resnet_attention_model import(
     SEBlock,
     ResidualBlock,
     ResAttentionConvNet
