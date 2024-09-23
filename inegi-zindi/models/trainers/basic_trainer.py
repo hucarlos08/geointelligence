@@ -24,7 +24,7 @@ class BasicTrainer(pl.LightningModule):
         self.f1 = F1Score(task="binary")
         self.aucroc = AUROC(task="binary")
 
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=['model','loss'])
 
     def _compute_metrics(self, preds, masks):
         return {

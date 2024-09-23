@@ -6,17 +6,9 @@ from .embedding_model import (
     ConvEmbeddingClassifier,
 )
 
-from .resnet_attention_model import(
-    SEBlock,
-    ResidualBlock,
-    ResAttentionConvNet
-
-)
 
 from .cbam_model import(
-    CBAMBlock,
-    ResidualBlockCBAM,
-    ResAttentionConvNetCBAM
+    ResAttnConvNet
 )
 
 __all__ = [
