@@ -46,3 +46,21 @@ class CenterLoss(nn.Module):
         center_loss = (features - centers_batch).pow(2).mean() / 2.0
 
         return self.lambda_c * center_loss
+
+    @classmethod
+    def from_config(cls, config):
+        """
+        Create an instance of the CenterLoss from a configuration dictionary.
+
+        Args:
+            config (dict): A dictionary containing the configuration parameters for the CenterLoss.
+
+        Returns:
+            CenterLoss: An instance of the CenterLoss class.
+        """
+        # Extract the configuration parameters
+        num_classes = config.get('num_classes', 2)
+        feat_dim    = config.get('feat_dim', 256)
+        lambda_c    = config.get('lambda_c', 0.003)
+
+        return cls(num_classes, feat_dim, lambda_c)

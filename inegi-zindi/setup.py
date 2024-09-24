@@ -22,6 +22,6 @@ setup(
     'torchmetrics', 
     'pytorch_lightning',
     'h5py',
-    'jax',
+    'pytest',
                           ],
 )

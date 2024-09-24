@@ -21,8 +21,8 @@ class FeatureAwareTrainer(BasicTrainer):
         scheduler_config (dict): Configuration for the learning rate scheduler.
     """
 
-    def __init__(self, model, combined_loss, optimizer_config: dict, scheduler_config: dict):
-        super().__init__(model, combined_loss, optimizer_config, scheduler_config)
+    def __init__(self, model, loss, optimizer_config: dict, scheduler_config: dict):
+        super().__init__(model, loss, optimizer_config, scheduler_config)
 
     def step(self, batch, stage):
         """
@@ -41,12 +41,14 @@ class FeatureAwareTrainer(BasicTrainer):
         logits, features = self.forward(images, return_features=True)
 
         # Compute the combined loss
-        loss, center_loss, focal_loss = self.loss(logits, features, labels)
+        loss, loss_components = self.loss(logits, features, labels)
 
+        # Log the total loss
         self.log(f'{stage}_loss', loss, prog_bar=True, on_epoch=True, logger=True, batch_size=images.size(0))
-        #self.log(f'{stage}_arcface_loss', arcface_loss, prog_bar=False, on_epoch=True, logger=True, batch_size=images.size(0))
-        self.log(f'{stage}_center_loss', center_loss,   prog_bar=False, on_epoch=True, logger=True, batch_size=images.size(0))
-        self.log(f'{stage}_feature_loss', focal_loss, prog_bar=False, on_epoch=True, logger=True, batch_size=images.size(0))
+
+        # Log individual loss components
+        for loss_name, loss_value in loss_components.items():
+            self.log(f'{stage}_{loss_name}_loss', loss_value, prog_bar=False, on_epoch=True, logger=True, batch_size=images.size(0))
 
         preds = torch.sigmoid(logits)  # For binary classification
         metrics = self._compute_metrics(preds, labels)

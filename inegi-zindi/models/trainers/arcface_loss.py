@@ -4,11 +4,11 @@ import torch.nn.functional as F
 import math
 
 class ArcFaceLoss(nn.Module):
-    def __init__(self, num_features, scale=30.0, margin=0.50):
+    def __init__(self, feat_dim, scale=30.0, margin=0.50):
         super(ArcFaceLoss, self).__init__()
         self.scale = scale
         self.margin = margin
-        self.weight = nn.Parameter(torch.Tensor(2, num_features))  # 2 classes for binary classification
+        self.weight = nn.Parameter(torch.Tensor(2, feat_dim))  # 2 classes for binary classification
         nn.init.xavier_uniform_(self.weight)  # Initialize weights
 
     def forward(self, features, labels):
