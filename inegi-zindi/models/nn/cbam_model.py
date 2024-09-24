@@ -1,63 +1,152 @@
-import math
 import torch
 import torch.nn as nn
-from typing import Type
+import torch.nn.functional as F
 
-from .seblock_model import SEBlock
-from .residual_cbam_block import ResidualBlockCBAM
+class SEBlockCBAM(nn.Module):
+    """
+    SEBlockCBAM is a class that implements the Squeeze-and-Excitation (SE) block with Channel Attention Module (CBAM).
 
+    Args:
+        channel (int): The number of input channels.
+        reduction (int, optional): The reduction ratio for the channel dimension. Default is 16.
 
-class ResAttnConvNet(nn.Module):
-    def __init__(
-        self, 
-        input_channels=6, 
-        initial_channels=32,  # Starting dimension
-        embedding_size=256,  # Desired embedding size
-        depth=2,  # Number of times to halve the embedding size
-        num_classes=1, 
-        reduction: int = 16,
-        dropout_rate=0.5,
-        activation: Type[nn.Module] = nn.ReLU,
-        normalization: Type[nn.Module] = nn.BatchNorm2d
-    ):
-        super(ResAttnConvNet, self).__init__()
+    Attributes:
+        avg_pool (nn.AdaptiveAvgPool2d): Adaptive average pooling layer.
+        fc (nn.Sequential): Sequential module consisting of linear layers and activation functions.
+
+    Methods:
+        forward(x): Performs forward pass of the SEBlockCBAM module.
+
+    """
+    def __init__(self, channel, reduction=16):
+        super(SEBlockCBAM, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(channel, channel // reduction, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(channel // reduction, channel, bias=False),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        """
+        Performs forward pass of the SEBlockCBAM module.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, channels, height, width).
+
+        Returns:
+            torch.Tensor: Output tensor after applying the SEBlockCBAM module, of shape (batch_size, channels, height, width).
+
+        """
+        b, c, _, _ = x.size()
+        y = self.avg_pool(x).view(b, c)
+        y = self.fc(y).view(b, c, 1, 1)
+        return x * y.expand_as(x)
+
+# CBAM block: channel and spatial attention
+class CBAMBlock(nn.Module):
+    def __init__(self, channel, reduction=16):
+        super(CBAMBlock, self).__init__()
+        self.channel_attention = SEBlockCBAM(channel, reduction)
+        self.spatial_attention = nn.Sequential(
+            nn.Conv2d(2, 1, kernel_size=7, padding=3, bias=False),
+            nn.BatchNorm2d(1),  # Normalization
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        # Channel Attention
+        x = self.channel_attention(x)
         
-        self.conv1 = nn.Conv2d(input_channels, initial_channels, kernel_size=3, padding=1)
-        self.bn1 = normalization(initial_channels)
-        self.activation = activation(inplace=True)
+        # Spatial Attention
+        avg_out = torch.mean(x, dim=1, keepdim=True)
+        max_out, _ = torch.max(x, dim=1, keepdim=True)
+        spatial_attn = torch.cat([avg_out, max_out], dim=1)
+        spatial_attn = self.spatial_attention(spatial_attn)
         
-        # Calculate the number of residual blocks based on initial_channels and embedding_size
-        num_residual_blocks = int(math.log2(embedding_size // initial_channels))
+        return x * spatial_attn
 
-        # Dynamically create residual blocks that double channels until embedding size is reached
-        self.res_blocks = nn.ModuleList()
-        in_channels = initial_channels
-        out_channels = initial_channels
-        for _ in range(num_residual_blocks):
-            out_channels = min(in_channels * 2, embedding_size)  # Double channels but cap at embedding size
-            self.res_blocks.append(
-                ResidualBlockCBAM(in_channels, out_channels, reduction=reduction, 
-                                  dropout_rate=dropout_rate, activation=activation, 
-                                  normalization=normalization)
+# Residual block with CBAM attention
+class ResidualBlockCBAM(nn.Module):
+    def __init__(self, in_channels, out_channels, reduction=16, dropout_rate=0.5):
+        super(ResidualBlockCBAM, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.cbam = CBAMBlock(out_channels, reduction)
+        self.dropout = nn.Dropout(dropout_rate)
+        
+        self.shortcut = nn.Sequential()
+        if in_channels != out_channels:
+            self.shortcut = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=1),
+                nn.BatchNorm2d(out_channels)
             )
-            in_channels = out_channels  # Update in_channels for the next block
 
+    def forward(self, x):
+        residual = x
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out = self.cbam(out)
+        out += self.shortcut(residual)
+        out = F.relu(out)
+        out = self.dropout(out)  # Regularization with dropout
+        return out
+
+# Full ResNet with CBAM and regularization
+class ResAttentionConvNetCBAM(nn.Module):
+    """
+    ResAttentionConvNetCBAM is a class that implements a convolutional neural network with residual blocks and attention mechanism using CBAM.
+
+    Args:
+        input_channels (int, optional): The number of input channels. Default is 6.
+        embedding_size (int, optional): The size of the embedding layer. Default is 256.
+        num_classes (int, optional): The number of output classes. Default is 1.
+        dropout_rate (float, optional): The dropout rate. Default is 0.5.
+
+    Attributes:
+        conv1 (nn.Conv2d): Convolutional layer with 32 output channels and kernel size 3.
+        bn1 (nn.BatchNorm2d): Batch normalization layer.
+        res1 (ResidualBlockCBAM): Residual block with CBAM attention mechanism.
+        res2 (ResidualBlockCBAM): Residual block with CBAM attention mechanism.
+        res3 (ResidualBlockCBAM): Residual block with CBAM attention mechanism.
+        res4 (ResidualBlockCBAM): Residual block with CBAM attention mechanism.
+        global_pool (nn.AdaptiveAvgPool2d): Adaptive average pooling layer.
+        fc1 (nn.Linear): Fully connected layer with 512 input features and 256 output features.
+        fc2 (nn.Linear): Fully connected layer with 256 input features and embedding_size output features.
+        fc3 (nn.Linear): Fully connected layer with embedding_size input features and num_classes output features.
+        dropout (nn.Dropout): Dropout layer.
+
+    Methods:
+        feature_extractor(x): Extracts features from the input tensor.
+        forward(x, return_features): Performs forward pass of the ResAttentionConvNetCBAM module.
+
+    """
+    def __init__(self, input_channels=6, embedding_size=256, num_classes=1, dropout_rate=0.5):
+        super(ResAttentionConvNetCBAM, self).__init__()
+        
+        self.conv1 = nn.Conv2d(input_channels, 32, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(32)
+        
+        # Residual blocks with CBAM
+        self.res1 = ResidualBlockCBAM(32, 64, reduction=16, dropout_rate=dropout_rate)
+        self.res2 = ResidualBlockCBAM(64, 128, reduction=16, dropout_rate=dropout_rate)
+        self.res3 = ResidualBlockCBAM(128, 256, reduction=16, dropout_rate=dropout_rate)
+        self.res4 = ResidualBlockCBAM(256, 512, reduction=16, dropout_rate=dropout_rate)
+        
         # Global pooling layer
         self.global_pool = nn.AdaptiveAvgPool2d(1)
         
-        # Dropout layer
+        # Fully connected layers for feature extraction
+        self.fc1 = nn.Linear(512, 256)
+        self.fc2 = nn.Linear(256, embedding_size)
+
+        # Fully connected layer for classification
+        self.fc3 = nn.Linear(embedding_size, num_classes)
+        
         self.dropout = nn.Dropout(dropout_rate)
-
-        # Dynamically create fully connected layers to reduce embedding size
-        self.fc_layers = nn.ModuleList()
-        current_size = embedding_size
-        for _ in range(depth):
-            next_size = current_size // 2
-            self.fc_layers.append(nn.Linear(current_size, next_size))
-            current_size = next_size
-
-        # Final classification layer
-        self.fc_final = nn.Linear(current_size, num_classes)
 
     def feature_extractor(self, x):
         """
@@ -68,46 +157,65 @@ class ResAttnConvNet(nn.Module):
 
         Returns:
             torch.Tensor: Extracted features tensor of shape (batch_size, embedding_size).
+
         """
-        x = self.activation(self.bn1(self.conv1(x)))
-        x = self.dropout(x)
+        x = F.relu(self.bn1(self.conv1(x)))  # Apply ReLU after batch normalization
+        x = self.res1(x)
+        x = self.res2(x)
+        x = self.res3(x)
+        x = self.res4(x)
         
-        for res_block in self.res_blocks:
-            x = res_block(x)
+        x = self.global_pool(x)  # Global pooling
+        x = x.view(x.size(0), -1)  # Flatten the tensor
         
-        x = self.global_pool(x)
-        x = x.view(x.size(0), -1)
+        x = F.relu(self.fc1(x))  # Fully connected layer followed by ReLU
+        x = self.dropout(x)  # Apply dropout after ReLU
+        x = F.relu(self.fc2(x))  # ReLU after second fully connected layer
+        x = self.dropout(x)  # Apply dropout again
 
         return x
 
     def forward(self, x, return_features=False):
+        """
+        Performs forward pass of the ResAttentionConvNetCBAM module.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, channels, height, width).
+            return_features (bool, optional): Whether to return the extracted features. Default is False.
+
+        Returns:
+            torch.Tensor: Output tensor after applying the ResAttentionConvNetCBAM module, of shape (batch_size, num_classes).
+            torch.Tensor: Extracted features tensor of shape (batch_size, embedding_size), if return_features is True.
+
+        """
         features = self.feature_extractor(x)
-        
-        # Apply fully connected layers
-        x = features
-        for fc in self.fc_layers:
-            x = self.activation(fc(x))
-            x = self.dropout(x)
-        
-        # Final classification layer
-        x = self.fc_final(x) # (batch_size, num_classes), No activation function applied here as it is included in the loss function
+        x = self.dropout(features)  # Dropout before final layer
+        x = self.fc3(x)  # No activation here because it's typically handled by the loss function (e.g., sigmoid for BCE)
         
         if return_features:
             return x, features
         return x
 
     @classmethod
-    def from_config(cls, config: dict) -> 'ResAttnConvNet':
-        return cls(
-            input_channels=config.get('input_channels', 6),
-            initial_channels=config.get('initial_channels', 32),
-            embedding_size=config.get('embedding_size', 256),
-            num_classes=config.get('num_classes', 1),
-            reduction=config.get('reduction', 16),
-            dropout_rate=config.get('dropout_rate', 0.5),
-            depth=config.get('depth', 2)  # Depth parameter for fully connected layers
-        )
+    def from_config(cls, config):
+        """
+        Creates an instance of ResAttentionConvNetCBAM from a configuration dictionary.
+
+        Args:
+            config (dict): Configuration dictionary.
+
+        Returns:
+            ResAttentionConvNetCBAM: An instance of ResAttentionConvNetCBAM.
+
+        """
+        input_channels = config.get('input_channels', 6)
+        embedding_size = config.get('embedding_size', 256)
+        num_classes = config.get('num_classes', 1)
+        dropout_rate = config.get('dropout_rate', 0.5)
+        return cls(input_channels=input_channels, embedding_size=embedding_size, num_classes=num_classes, dropout_rate=dropout_rate)
 
     @staticmethod
     def get_class_name() -> str:
-        return 'RACNet'
+        return 'RASENet'
+
+

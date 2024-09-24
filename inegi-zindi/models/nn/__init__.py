@@ -7,8 +7,12 @@ from .embedding_model import (
 )
 
 
-from .cbam_model import(
+from .rac_net_model import(
     ResAttnConvNet
+)
+
+from .cbam_model import(
+    ResAttentionConvNetCBAM
 )
 
 __all__ = [
