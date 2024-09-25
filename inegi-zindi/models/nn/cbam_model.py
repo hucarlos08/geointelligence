@@ -124,7 +124,7 @@ class ResAttentionConvNetCBAM(nn.Module):
         forward(x, return_features): Performs forward pass of the ResAttentionConvNetCBAM module.
 
     """
-    def __init__(self, input_channels=6, embedding_size=256, num_classes=1, dropout_rate=0.5):
+    def __init__(self, input_channels=6, embedding_size=128, num_classes=1, dropout_rate=0.5):
         super(ResAttentionConvNetCBAM, self).__init__()
         
         self.conv1 = nn.Conv2d(input_channels, 32, kernel_size=3, padding=1)
@@ -141,10 +141,11 @@ class ResAttentionConvNetCBAM(nn.Module):
         
         # Fully connected layers for feature extraction
         self.fc1 = nn.Linear(512, 256)
-        self.fc2 = nn.Linear(256, embedding_size)
+        self.fc2 = nn.Linear(256, 128)
+        self.fc3 = nn.Linear(128, embedding_size)
 
         # Fully connected layer for classification
-        self.fc3 = nn.Linear(embedding_size, num_classes)
+        self.fc4 = nn.Linear(embedding_size, num_classes)
         
         self.dropout = nn.Dropout(dropout_rate)
 
@@ -172,6 +173,8 @@ class ResAttentionConvNetCBAM(nn.Module):
         x = self.dropout(x)  # Apply dropout after ReLU
         x = F.relu(self.fc2(x))  # ReLU after second fully connected layer
         x = self.dropout(x)  # Apply dropout again
+        x = F.relu(self.fc3(x))
+        x = self.dropout(x)  # Regularization with dropout
 
         return x
 
@@ -190,7 +193,7 @@ class ResAttentionConvNetCBAM(nn.Module):
         """
         features = self.feature_extractor(x)
         x = self.dropout(features)  # Dropout before final layer
-        x = self.fc3(x)  # No activation here because it's typically handled by the loss function (e.g., sigmoid for BCE)
+        x = self.fc4(x)  # No activation here because it's typically handled by the loss function (e.g., sigmoid for BCE)
         
         if return_features:
             return x, features

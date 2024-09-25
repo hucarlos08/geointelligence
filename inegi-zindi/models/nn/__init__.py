@@ -15,6 +15,10 @@ from .cbam_model import(
     ResAttentionConvNetCBAM
 )
 
+from .cbam_resnet_model import(
+    CBAMResNet
+)
+
 __all__ = [
     "SimpleClassifier",
     "ConvEmbeddingClassifier",
