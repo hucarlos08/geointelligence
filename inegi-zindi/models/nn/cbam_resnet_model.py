@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
+from .lsoftmax_module import LSoftmaxBinary
+
 class SEBlockCBAM(nn.Module):
     """
     SEBlockCBAM is a class that implements the Squeeze-and-Excitation (SE) block with Channel Attention Module (CBAM).
@@ -133,7 +135,7 @@ class FinalLayerAttention(nn.Module):
 
 class CBAMResNet(nn.Module):
     def __init__(self, input_channels=6, num_classes=1, initial_channels=32, num_blocks=4, 
-                 channel_multiplier=2, dropout_rate=0.5, embedding_size=128):
+                 channel_multiplier=2, dropout_rate=0.5, embedding_size=128, lsoftmax_margin=4):
         super(CBAMResNet, self).__init__()
         
         self.conv1 = nn.Conv2d(input_channels, initial_channels, kernel_size=3, padding=1)
@@ -161,8 +163,11 @@ class CBAMResNet(nn.Module):
             fc_in_features = fc_out_features
         
         # Replace the final classification layer with the attention-based layer
-        self.fc_final = FinalLayerAttention(embedding_size, num_classes)
+        self.fc_final_attention = FinalLayerAttention(embedding_size, num_classes)
         
+        # Add L-softmax after attention
+        self.lsoftmax = LSoftmaxBinary(embedding_size, num_classes, margin=lsoftmax_margin)
+
         self.dropout = nn.Dropout(dropout_rate)
 
     def feature_extractor(self, x):
@@ -184,11 +189,22 @@ class CBAMResNet(nn.Module):
     def forward(self, x, return_features=False):
         features = self.feature_extractor(x)
         x = self.dropout(features)
-        x = self.fc_final(x)
+        
+        # Apply FinalLayerAttention first
+        logits = self.fc_final_attention(x)
+        
+        # Check if labels are provided (i.e., during training)
+        if self.training and labels is not None:
+            # Apply L-Softmax during training (with margin)
+            logits = self.lsoftmax(x, labels)
+        else:
+            # During inference, no margin is applied, so treat it like regular logits
+            logits = self.lsoftmax(x)  # Pass without labels to skip the margin
         
         if return_features:
-            return x, features
-        return x
+            return logits, features
+        return logits
+
 
     @classmethod
     def from_config(cls, config):

@@ -1,6 +1,6 @@
 import torch
 from torchinfo import summary
-from models.nn import CBAMResNet  # Assuming this is the name of your module
+from models.nn import CBAMResNet 
 
 def visualize_model_layers(input_shape=(1024, 6, 16, 16), **model_params):
     # Create an instance of the model
@@ -20,5 +20,6 @@ if __name__ == "__main__":
         num_blocks=4,
         channel_multiplier=2,
         dropout_rate=0.5,
-        embedding_size=128
+        embedding_size=128,
+        lsoftmax_margin=4 
    )

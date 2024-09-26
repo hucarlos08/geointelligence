@@ -20,7 +20,7 @@ loss_functions:
     params: 
       num_classes: 2
       feat_dim: 128
-      lambda_c: 0.03
+      lambda_c: 0.3
     weight: 1.0
   focal:
     params: 
