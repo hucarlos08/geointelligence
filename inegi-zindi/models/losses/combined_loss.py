@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .center_loss import CenterLoss
-from .arcface_loss import ArcFaceLoss
-from .focal_loss import FocalLoss
+from ..losses import CenterLoss
+from ..losses import ArcFaceLoss
+from ..losses import FocalLoss
 
 class CombinedLoss(nn.Module):
     """

@@ -96,8 +96,6 @@ class ResidualBlockCBAM(nn.Module):
         out = self.dropout(out)  # Regularization with dropout
         return out
 
-
-
 class FCAttention(nn.Module):
     def __init__(self, in_features, reduction_ratio=16):
         super(FCAttention, self).__init__()
@@ -115,6 +113,22 @@ class FCAttention(nn.Module):
         y = self.fc(y).view(b, c)
         return x * y
 
+
+class FinalLayerAttention(nn.Module):
+    def __init__(self, embedding_size, num_classes):
+        super(FinalLayerAttention, self).__init__()
+        self.attention = nn.Sequential(
+            nn.Linear(embedding_size, embedding_size // 2),
+            nn.ReLU(),
+            nn.Linear(embedding_size // 2, num_classes),
+            nn.Sigmoid()
+        )
+        self.value = nn.Linear(embedding_size, num_classes)
+
+    def forward(self, x):
+        attention_weights = self.attention(x)
+        values = self.value(x)
+        return (attention_weights * values).sum(dim=1, keepdim=True)
 
 
 class CBAMResNet(nn.Module):
@@ -146,8 +160,8 @@ class CBAMResNet(nn.Module):
             self.fc_attention_layers.append(FCAttention(fc_out_features))
             fc_in_features = fc_out_features
         
-        # Final classification layer
-        self.fc_final = nn.Linear(embedding_size, num_classes)
+        # Replace the final classification layer with the attention-based layer
+        self.fc_final = FinalLayerAttention(embedding_size, num_classes)
         
         self.dropout = nn.Dropout(dropout_rate)
 

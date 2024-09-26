@@ -15,9 +15,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 
 from models.data import LandsatDataModule
 from models.nn import CBAMResNet
-from models.trainers import BasicTrainer
-from models.trainers import LossFactory
-from models.trainers import CombinedLoss
+from models.losses import CombinedLoss
 from models.trainers import FeatureAwareTrainer
 
 
