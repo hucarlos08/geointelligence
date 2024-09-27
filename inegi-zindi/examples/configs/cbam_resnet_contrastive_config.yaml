@@ -1,7 +1,7 @@
 data_module:
   train_file: '/teamspace/studios/this_studio/datasets/uint16_optimized_balanced_train_data.h5'
   test_file: '/teamspace/studios/this_studio/dataset/test_data.h5'
-  batch_size: 1024
+  batch_size: 512
   dtype: !!python/name:numpy.uint16 ''
   num_workers: 4
   seed: 50
@@ -11,17 +11,11 @@ data_module:
 model:
   input_channels: 6
   initial_channels: 32
-  embedding_size: 128
+  embedding_size: 64
   num_blocks: 4
   num_classes: 1
   dropout_rate: 0.5
 loss_functions:
-  center:
-    params: 
-      num_classes: 2
-      feat_dim: 128
-      lambda_c: 0.03
-    weight: 1.0
   focal:
     params: 
       alpha: 0.25
@@ -32,8 +26,6 @@ optimizer:
   lr: 0.001
   weight_decay: 1.0e-5
 scheduler:
-  type: 'ReduceLROnPlateau'
-  mode: 'min'
-  factor: 0.1
-  patience: 10
-  verbose: True
+  type: 'StepLR'
+  step_size: 15
+  gamma: 0.1

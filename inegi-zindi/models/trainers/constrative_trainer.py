@@ -7,7 +7,9 @@ from torchmetrics import Accuracy, Precision, Recall, F1Score, JaccardIndex, AUR
 from ..utils import get_optimizer, get_lr_scheduler
 from .basic_trainer import BasicTrainer
 
-class FeatureAwareTrainer(BasicTrainer):
+from ..losses import ContrastiveLoss
+
+class ContrastiveTrainer(BasicTrainer):
     """
     A PyTorch Lightning trainer class for training a model with both logits and features.
 
@@ -24,6 +26,8 @@ class FeatureAwareTrainer(BasicTrainer):
     def __init__(self, model, loss, optimizer_config: dict, scheduler_config: dict):
         super().__init__(model, loss, optimizer_config, scheduler_config)
 
+        self.contrastive_loss = ContrastiveLoss()
+
     def step(self, batch, stage):
         """
         Perform a forward pass and compute the loss and metrics for a given batch.
@@ -35,26 +39,39 @@ class FeatureAwareTrainer(BasicTrainer):
         Returns:
             loss (torch.Tensor): The computed loss for the batch.
         """
-        images, labels = batch
+        anchor_images, anchor_labels, pair_images, pair_labels, labels = batch
 
         # Forward pass now returns both logits and features
-        logits, features = self.forward(images, labels, return_features=True)
+        anchor_logits, anchor_features  = self.forward(anchor_images, anchor_labels, return_features=True)
+        pair_logits, pair_features      = self.forward(pair_images, pair_labels,  return_features=True)
 
         # Compute the combined loss
-        loss, loss_components = self.loss(logits, features, labels)
+        loss, loss_components = self.loss(anchor_logits, anchor_features, anchor_labels)
 
+        # Compute the constrative loss
+        loss_contrastive = self.contrastive_loss(anchor_features, pair_features, labels)
+
+        # Combine the losses
+        loss += loss_contrastive
+
+        # Batch size
+        batch_size = anchor_images.size(0)
+        
         # Log the total loss
-        self.log(f'{stage}_loss', loss, prog_bar=True, on_epoch=True, logger=True, batch_size=images.size(0))
+        self.log(f'{stage}_loss', loss, prog_bar=True, on_epoch=True, logger=True, batch_size=batch_size)
+
+        # Log the constrative loss
+        self.log(f'{stage}_contrastive_loss', loss_contrastive, prog_bar=False, on_epoch=True, logger=True, batch_size=batch_size)
 
         # Log individual loss components
         for loss_name, loss_value in loss_components.items():
-            self.log(f'{stage}_{loss_name}_loss', loss_value, prog_bar=False, on_epoch=True, logger=True, batch_size=images.size(0))
+            self.log(f'{stage}_{loss_name}_loss', loss_value, prog_bar=False, on_epoch=True, logger=True, batch_size=batch_size)
 
-        preds = torch.sigmoid(logits)  # For binary classification
-        metrics = self._compute_metrics(preds, labels)
+        preds = torch.sigmoid(anchor_logits)  # For binary classification
+        metrics = self._compute_metrics(preds, anchor_labels)
 
         # Log the metrics using the helper function
-        self._log_metrics(metrics, stage, batch_size=images.size(0))
+        self._log_metrics(metrics, stage, batch_size=batch_size)
 
         return loss
 

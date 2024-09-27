@@ -68,4 +68,13 @@ class BasicTrainer(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = get_optimizer(self.parameters(), self.optimizer_config)
         scheduler = get_lr_scheduler(optimizer, self.scheduler_config)
-        return [optimizer], [scheduler]
+
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "monitor": "val_loss",  # This is the quantity to monitor
+                "interval": "epoch",
+                "frequency": 1
+            },
+        }

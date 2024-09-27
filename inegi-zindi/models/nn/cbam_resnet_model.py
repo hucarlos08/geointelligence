@@ -135,7 +135,7 @@ class FinalLayerAttention(nn.Module):
 
 class CBAMResNet(nn.Module):
     def __init__(self, input_channels=6, num_classes=1, initial_channels=32, num_blocks=4, 
-                 channel_multiplier=2, dropout_rate=0.5, embedding_size=128, lsoftmax_margin=4):
+                 channel_multiplier=2, dropout_rate=0.5, embedding_size=128, lsoftmax_margin=1):
         super(CBAMResNet, self).__init__()
         
         self.conv1 = nn.Conv2d(input_channels, initial_channels, kernel_size=3, padding=1)
@@ -166,7 +166,7 @@ class CBAMResNet(nn.Module):
         self.fc_final_attention = FinalLayerAttention(embedding_size, num_classes)
         
         # Add L-softmax after attention
-        self.lsoftmax = LSoftmaxBinary(embedding_size, num_classes, margin=lsoftmax_margin)
+        self.lsoftmax = LSoftmaxBinary(in_features=embedding_size, margin=lsoftmax_margin)
 
         self.dropout = nn.Dropout(dropout_rate)
 
@@ -186,24 +186,26 @@ class CBAMResNet(nn.Module):
         
         return x
         
-    def forward(self, x, return_features=False):
+    def forward(self, x, labels=None, return_features=False):
         features = self.feature_extractor(x)
         x = self.dropout(features)
         
         # Apply FinalLayerAttention first
         logits = self.fc_final_attention(x)
         
+        # Apply L-Softmax on the extracted features (pass labels during training)
         # Check if labels are provided (i.e., during training)
-        if self.training and labels is not None:
-            # Apply L-Softmax during training (with margin)
-            logits = self.lsoftmax(x, labels)
-        else:
-            # During inference, no margin is applied, so treat it like regular logits
-            logits = self.lsoftmax(x)  # Pass without labels to skip the margin
+        # if self.training and labels is not None:
+        #     # Apply L-Softmax during training (with margin)
+        #     logits = self.lsoftmax(x, labels)
+        # else:
+        #     # During inference, no margin is applied, so treat it like regular logits
+        #     logits = self.lsoftmax(x)  # Pass without labels to skip the margin
         
         if return_features:
             return logits, features
         return logits
+
 
 
     @classmethod

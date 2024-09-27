@@ -15,6 +15,10 @@ from .sigmoid_focal_loss import(
     SigmoidFocalLoss
 )
 
+from .constrative_loss import(
+    ContrastiveLoss
+)
+
 from .combined_loss import(
     CombinedLoss
 )

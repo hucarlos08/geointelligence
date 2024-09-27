@@ -6,6 +6,14 @@ from .datamodule import (
     LandsatDataModule
 )
 
+from .contrastive_dataset import (
+    ContrastiveDataset
+)
+
+from .contrastive_datamodule import (
+    ContrastiveDataModule
+)
+
 from .hdf5_corrections import (
     optimize_hdf5_chunking,
     balance_hdf5_dataset,
