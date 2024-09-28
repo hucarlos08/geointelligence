@@ -10,8 +10,6 @@ setup(
     packages=find_packages(),
     install_requires=[
     'numpy', 
-    'jupyter', 
-    'jupyterlab',
     'torch',
     'torchvision',
     'matplotlib',
