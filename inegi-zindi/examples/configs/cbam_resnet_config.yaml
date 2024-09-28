@@ -1,7 +1,7 @@
 data_module:
   train_file: '/teamspace/studios/this_studio/datasets/uint16_optimized_balanced_train_data.h5'
   test_file: '/teamspace/studios/this_studio/dataset/test_data.h5'
-  batch_size: 1024
+  batch_size: 512
   dtype: !!python/name:numpy.uint16 ''
   num_workers: 4
   seed: 50
@@ -33,7 +33,7 @@ optimizer:
   weight_decay: 1.0e-5
 scheduler:
   type: 'ReduceLROnPlateau'
-  mode: 'min'
+  mode: 'max'
   factor: 0.1
-  patience: 10
+  patience: 5
   verbose: True

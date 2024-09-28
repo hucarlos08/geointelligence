@@ -20,6 +20,5 @@ if __name__ == "__main__":
         num_blocks=4,
         channel_multiplier=2,
         dropout_rate=0.5,
-        embedding_size=128,
-        lsoftmax_margin=4 
+        embedding_size=128
    )

@@ -73,7 +73,7 @@ class BasicTrainer(pl.LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "monitor": "val_loss",  # This is the quantity to monitor
+                "monitor": "val_aucroc",  # This is the quantity to monitor
                 "interval": "epoch",
                 "frequency": 1
             },

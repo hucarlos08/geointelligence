@@ -109,3 +109,8 @@ class FeatureAwareTrainer(BasicTrainer):
             loss (torch.Tensor): The computed loss for the batch.
         """
         return self.step(batch, 'test')
+
+    def on_train_end(self):
+        model_name = self.model.get_class_name()
+        file_name = f'/teamspace/studios/this_studio/inegi/inegi-zindi/models_weights/{model_name}.pth'
+        torch.save(self.model.state_dict(), file_name)

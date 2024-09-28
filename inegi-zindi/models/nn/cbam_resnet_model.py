@@ -3,122 +3,26 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-from .lsoftmax_module import LSoftmaxBinary
+from .attention_models import FCAttention
+from .residual_cbam_block import ResidualBlockCBAM
 
-class SEBlockCBAM(nn.Module):
+class AttentionWeightedClassifier(nn.Module):
     """
-    SEBlockCBAM is a class that implements the Squeeze-and-Excitation (SE) block with Channel Attention Module (CBAM).
+    AttentionWeightedClassifier is a neural network module that applies an attention mechanism 
+    before performing classification. The attention mechanism allows the model to focus on 
+    different parts of the input when making the final prediction.
 
     Args:
-        channel (int): The number of input channels.
-        reduction (int, optional): The reduction ratio for the channel dimension. Default is 16.
+        embedding_size (int): The number of input features the module should expect from its input.
+        num_classes (int): The number of output classes the model should predict.
 
     Attributes:
-        avg_pool (nn.AdaptiveAvgPool2d): Adaptive average pooling layer.
-        fc (nn.Sequential): Sequential module consisting of linear layers and activation functions.
-
-    Methods:
-        forward(x): Performs forward pass of the SEBlockCBAM module.
-
+        attention (nn.Module): A sequence of linear and non-linear operations that implement the attention mechanism.
+        value (nn.Module): A linear layer that transforms the input features into output classes.
     """
-    def __init__(self, channel, reduction=16):
-        super(SEBlockCBAM, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(
-            nn.Linear(channel, channel // reduction, bias=False),
-            nn.ReLU(inplace=True),
-            nn.Linear(channel // reduction, channel, bias=False),
-            nn.Sigmoid()
-        )
 
-    def forward(self, x):
-        """
-        Performs forward pass of the SEBlockCBAM module.
-
-        Args:
-            x (torch.Tensor): Input tensor of shape (batch_size, channels, height, width).
-
-        Returns:
-            torch.Tensor: Output tensor after applying the SEBlockCBAM module, of shape (batch_size, channels, height, width).
-
-        """
-        b, c, _, _ = x.size()
-        y = self.avg_pool(x).view(b, c)
-        y = self.fc(y).view(b, c, 1, 1)
-        return x * y.expand_as(x)
-
-# CBAM block: channel and spatial attention
-class CBAMBlock(nn.Module):
-    def __init__(self, channel, reduction=16):
-        super(CBAMBlock, self).__init__()
-        self.channel_attention = SEBlockCBAM(channel, reduction)
-        self.spatial_attention = nn.Sequential(
-            nn.Conv2d(2, 1, kernel_size=7, padding=3, bias=False),
-            nn.BatchNorm2d(1),  # Normalization
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        # Channel Attention
-        x = self.channel_attention(x)
-        
-        # Spatial Attention
-        avg_out = torch.mean(x, dim=1, keepdim=True)
-        max_out, _ = torch.max(x, dim=1, keepdim=True)
-        spatial_attn = torch.cat([avg_out, max_out], dim=1)
-        spatial_attn = self.spatial_attention(spatial_attn)
-        
-        return x * spatial_attn
-
-# Residual block with CBAM attention
-class ResidualBlockCBAM(nn.Module):
-    def __init__(self, in_channels, out_channels, reduction=16, dropout_rate=0.5):
-        super(ResidualBlockCBAM, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
-        self.bn1 = nn.BatchNorm2d(out_channels)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(out_channels)
-        self.cbam = CBAMBlock(out_channels, reduction)
-        self.dropout = nn.Dropout(dropout_rate)
-        
-        self.shortcut = nn.Sequential()
-        if in_channels != out_channels:
-            self.shortcut = nn.Sequential(
-                nn.Conv2d(in_channels, out_channels, kernel_size=1),
-                nn.BatchNorm2d(out_channels)
-            )
-
-    def forward(self, x):
-        residual = x
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
-        out = self.cbam(out)
-        out += self.shortcut(residual)
-        out = F.relu(out)
-        out = self.dropout(out)  # Regularization with dropout
-        return out
-
-class FCAttention(nn.Module):
-    def __init__(self, in_features, reduction_ratio=16):
-        super(FCAttention, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool1d(1)
-        self.fc = nn.Sequential(
-            nn.Linear(in_features, in_features // reduction_ratio, bias=False),
-            nn.ReLU(inplace=True),
-            nn.Linear(in_features // reduction_ratio, in_features, bias=False),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        b, c = x.size()
-        y = self.avg_pool(x.unsqueeze(2)).squeeze(2)
-        y = self.fc(y).view(b, c)
-        return x * y
-
-
-class FinalLayerAttention(nn.Module):
-    def __init__(self, embedding_size, num_classes):
-        super(FinalLayerAttention, self).__init__()
+    def __init__(self, embedding_size: int, num_classes: int):
+        super(AttentionWeightedClassifier, self).__init__()
         self.attention = nn.Sequential(
             nn.Linear(embedding_size, embedding_size // 2),
             nn.ReLU(),
@@ -127,7 +31,18 @@ class FinalLayerAttention(nn.Module):
         )
         self.value = nn.Linear(embedding_size, num_classes)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass of the AttentionWeightedClassifier.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, embedding_size)
+
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, 1). Each element in the output tensor 
+            represents the weighted sum of the class scores for a single instance in the batch. 
+            The weights are determined by the attention mechanism.
+        """
         attention_weights = self.attention(x)
         values = self.value(x)
         return (attention_weights * values).sum(dim=1, keepdim=True)
@@ -135,8 +50,16 @@ class FinalLayerAttention(nn.Module):
 
 class CBAMResNet(nn.Module):
     def __init__(self, input_channels=6, num_classes=1, initial_channels=32, num_blocks=4, 
-                 channel_multiplier=2, dropout_rate=0.5, embedding_size=128, lsoftmax_margin=1):
+                 channel_multiplier=2, dropout_rate=0.5, embedding_size=128):
         super(CBAMResNet, self).__init__()
+        
+        self.input_channels = input_channels
+        self.num_classes = num_classes
+        self.initial_channels = initial_channels
+        self.num_blocks = num_blocks
+        self.channel_multiplier = channel_multiplier
+        self.dropout_rate = dropout_rate
+        self.embedding_size = embedding_size
         
         self.conv1 = nn.Conv2d(input_channels, initial_channels, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm2d(initial_channels)
@@ -161,14 +84,14 @@ class CBAMResNet(nn.Module):
             self.fc_layers.append(nn.Linear(fc_in_features, fc_out_features))
             self.fc_attention_layers.append(FCAttention(fc_out_features))
             fc_in_features = fc_out_features
-        
-        # Replace the final classification layer with the attention-based layer
-        self.fc_final_attention = FinalLayerAttention(embedding_size, num_classes)
-        
-        # Add L-softmax after attention
-        self.lsoftmax = LSoftmaxBinary(in_features=embedding_size, margin=lsoftmax_margin)
 
         self.dropout = nn.Dropout(dropout_rate)
+
+        self._set_final_layer()
+    
+        
+    def _set_final_layer(self):
+        self.final_layer_classification = AttentionWeightedClassifier(self.embedding_size, self.num_classes)
 
     def feature_extractor(self, x):
         x = F.relu(self.bn1(self.conv1(x)))
@@ -191,22 +114,11 @@ class CBAMResNet(nn.Module):
         x = self.dropout(features)
         
         # Apply FinalLayerAttention first
-        logits = self.fc_final_attention(x)
-        
-        # Apply L-Softmax on the extracted features (pass labels during training)
-        # Check if labels are provided (i.e., during training)
-        # if self.training and labels is not None:
-        #     # Apply L-Softmax during training (with margin)
-        #     logits = self.lsoftmax(x, labels)
-        # else:
-        #     # During inference, no margin is applied, so treat it like regular logits
-        #     logits = self.lsoftmax(x)  # Pass without labels to skip the margin
-        
+        logits = self.final_layer_classification(x)
+
         if return_features:
             return logits, features
         return logits
-
-
 
     @classmethod
     def from_config(cls, config):

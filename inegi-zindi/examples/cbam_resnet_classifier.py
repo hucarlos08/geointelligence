@@ -11,7 +11,8 @@ import torch.nn.functional as F
 
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, EarlyStopping
+
 
 from models.data import LandsatDataModule
 from models.nn import CBAMResNet
@@ -66,21 +67,23 @@ def train_model():
         # Setup wandb logger
         wandb_logger = WandbLogger(project="INEGI", entity="geo-dl")
 
+        model_name = f'inegi-{model.get_class_name()}'
+
         # Setup model checkpoint callback
         checkpoint_callback = ModelCheckpoint(
             dirpath='checkpoints',
-            filename='inegi-{model.get_class_name()}-{epoch:02d}-{val_loss:.2f}',
+            filename=f'{model_name}'+'-{epoch:02d}-{val_loss:.2f}',
             save_top_k=3,
             monitor='val_aucroc',
-            mode='min'
+            mode='max'
         )
 
         early_stop_callback = EarlyStopping(
             monitor='val_aucroc', # Metric to monitor
-            patience=5,          # Number of epochs with no improvement before stopping training
+            patience=10,          # Number of epochs with no improvement before stopping training
             verbose=True,        # To display messages during training
-            mode='min',          # 'min' to reduce the metric, 'max' to maximize it
-            min_delta=0.0001     # Minimum improvement considered significant
+            mode='max',          # 'min' to reduce the metric, 'max' to maximize it
+            min_delta=0.0     # Minimum improvement considered significant
         )
 
         # Learning rate monitor
