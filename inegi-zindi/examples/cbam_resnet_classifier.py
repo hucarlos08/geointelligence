@@ -26,7 +26,7 @@ def train_model():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     logger = logging.getLogger()
 
-    CONFIG_FILE = '/teamspace/studios/this_studio/inegi/inegi-zindi/examples/configs/cbam_resnet_config.yaml'
+    CONFIG_FILE = '/teamspace/studios/this_studio/geointelligence/inegi-zindi/examples/configs/cbam_resnet_config.yaml'
     # Loading the config from a YAML file
     try:
         with open(CONFIG_FILE, 'r') as file:
@@ -96,7 +96,7 @@ def train_model():
             log_every_n_steps=5,
             callbacks=[checkpoint_callback, lr_monitor, early_stop_callback],
             accumulate_grad_batches=1,
-            devices=1 if torch.cuda.is_available() else None,
+            devices=1, #if torch.cuda.is_available() else None,
             accelerator='gpu' if torch.cuda.is_available() else 'cpu'
         )
         logger.info("Lightning Trainer created successfully")

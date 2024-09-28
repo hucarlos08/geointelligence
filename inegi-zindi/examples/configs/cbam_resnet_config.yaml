@@ -3,7 +3,7 @@ data_module:
   test_file: '/teamspace/studios/this_studio/dataset/test_data.h5'
   batch_size: 512
   dtype: !!python/name:numpy.uint16 ''
-  num_workers: 4
+  num_workers: 2
   seed: 50
   split_ratio: 
     - 0.8
